@@ -4,7 +4,7 @@
 
 ## Downloads
 
-https://github.com/raybritton/json-query/releases
+https://github.com/raybritton/disk-inspector/releases
 
 ## License
 
