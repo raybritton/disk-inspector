@@ -1,0 +1,75 @@
+# Based on the "trust" template v0.1.2
+# https://github.com/japaric/trust/tree/v0.1.2
+
+dist: trusty
+language: rust
+services: docker
+sudo: required
+
+env:
+  global:
+    - CRATE_NAME=disk-inspector
+
+matrix:
+  include:
+    # Android
+#    - env: TARGET=aarch64-linux-android DISABLE_TESTS=1
+#    - env: TARGET=arm-linux-androideabi DISABLE_TESTS=1
+#    - env: TARGET=armv7-linux-androideabi DISABLE_TESTS=1
+#    - env: TARGET=i686-linux-android DISABLE_TESTS=1
+#    - env: TARGET=x86_64-linux-android DISABLE_TESTS=1
+
+    # Linux
+    - env: TARGET=x86_64-unknown-linux-gnu
+    - env: TARGET=x86_64-unknown-linux-musl
+
+    # OSX
+    - env: TARGET=x86_64-apple-darwin
+      os: osx
+
+    # Windows
+    - env: TARGET=x86_64-pc-windows-gnu
+#    - env: TARGET=x86_64-pc-windows-msvc  # not working
+
+
+before_install:
+  - set -e
+  - rustup self update
+
+install:
+  - sh ci/install.sh
+  - source ~/.cargo/env || true
+
+script:
+  - bash ci/script.sh
+
+after_script: set +e
+
+before_deploy:
+  - sh ci/before_deploy.sh
+
+deploy:
+  api_key:
+    secure: QnEYwo0vynQvTMT6eb3VTDthvzbf08XmbM569VEzJ7Lk5bplZZ/Nel8hC0Dee9A3MRbxDt00ks2VnT2l+LcxvBQ3KIbPIgrIQd6hcJo64W0zy5AfGyGdX4+p0XCkvHRebKWtCktDhWxYsXfNbzN6TnHF3LjB14xLMb76nmKSBMYMT1cawhbRkgu90DgLIpr9He2l6gFtS8PgQOtmSpiILo3fZ3Lt5NZR2+5QgVM390plUcI9Mzbd7UI72VZqfEMd3ZmdsBgTQy+BFl944WpisDh+RkGyxlMttXddZ+q5xBpMhgvOzppMeqsVD0BEHp9ZmwtuL1arXTM8uXG7X9xbrF6X0GegdRuzeiUuMiS+0sfwKrHSkyhDrPIaogmjsEby1MFgMa3e6G6Kycnz+45wEB6VbsVEXsY1Yh90eXCb7iOQQbsSwU7LnH3XnGNIWeP0wlQ5mOimG815ZKrp+6pwv6OGYXYP/23/JqH9rYVkeG/J8/itqdK/kvHsswkA/62XL/f9zOQQ7it73aEkMLyAXNYNJZPIAA2e0qcktti+bo+1gy/Xz8rivJkZkmTtnn/xZw6B2NDVs8PVJH6ZxYYciyxJ78RdZJGyuBMc8lbkPCPHW9+F3wlYHw97DEztr+rOAvn1UN4iEACCHIEPUKk+Yp4IszdCbaw0MaDXe1g9cwE=
+  file_glob: true
+  file: $CRATE_NAME-$TRAVIS_TAG-$TARGET.*
+  on:
+    condition: $TRAVIS_RUST_VERSION = stable
+    tags: true
+  provider: releases
+  skip_cleanup: true
+
+cache: cargo
+before_cache:
+  # Travis can't cache files that are not readable by "others"
+  - chmod -R a+r $HOME/.cargo
+
+branches:
+  only:
+    # release tags
+    - /^v\d+\.\d+\.\d+.*$/
+    - master
+
+notifications:
+  email:
+    on_success: never

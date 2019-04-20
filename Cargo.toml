@@ -1,0 +1,9 @@
+[package]
+name = "disk-inspector"
+version = "0.0.1"
+authors = ["Ray Britton <raybritton@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+azul = { git = "https://github.com/maps4print/azul", rev = "9090ce2" }
+tui = "0.5.1"
