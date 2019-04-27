@@ -7,6 +7,7 @@ pub struct Disk {
     pub name: String,
     pub size: u64,
     pub available_space: u64,
+    pub total_space: u64,
     pub root: DiskItem,
 }
 
@@ -64,13 +65,15 @@ impl DiskItem {
                     let mut disk_item = DiskItem::new(&entry?)?;
                     if disk_item.is_dir && !disk_item.is_symlink {
                         disk_item.populate_actual(observer)?;
+                    } else {
+                        if disk_item.is_symlink {}
                     }
                     self.children.push(disk_item);
                 }
             }
             Err(_) => { /*don't care, nothing can be done*/ }
         }
-        self.size = self.children
+        self.size += self.children
             .iter()
             .fold(0, |acc, child| acc + child.size);
         self.files_size = self.children
@@ -89,6 +92,7 @@ pub fn get_all_disks(system: System) -> Vec<Disk> {
             name: disk.get_name().to_string_lossy().into_owned(),
             size: disk.get_total_space(),
             available_space: disk.get_available_space(),
+            total_space: disk.get_total_space(),
             root: DiskItem::new_root(disk.get_mount_point().to_owned()),
         })
         .collect();
@@ -100,20 +104,22 @@ pub enum Status {
 }
 
 pub struct Inspector<'a, F: FnMut(Status)> {
-    disk: &'a mut Disk,
+    disk: Disk,
     total_used_space: u64,
     bytes_counted: u64,
     status_observer: F,
+    mem_used: u128,
 }
 
 impl<'a, F> Inspector<'a, F> where F: FnMut(Status) -> () {
-    pub fn new(disk: &mut Disk, observer: F) -> Inspector<F> {
+    pub fn new(mut disk: Disk, observer: F) -> Inspector<F> {
         let total_used_space = disk.size - disk.available_space;
         Inspector {
             disk,
             total_used_space,
             bytes_counted: 0,
             status_observer: observer,
+            mem_used: 0,
         }
     }
 
@@ -125,6 +131,7 @@ impl<'a, F> Inspector<'a, F> where F: FnMut(Status) -> () {
             *bytes_counted += bytes as f64;
             observer(Status::Reading { percentage: (*bytes_counted / total_used_space) });
         })?;
+        println!("Last file read");
         (self.status_observer)(Status::Done);
         Ok(())
     }
