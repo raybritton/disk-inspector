@@ -1,23 +1,25 @@
 use sysinfo::{SystemExt, DiskExt, System};
 use std::path::PathBuf;
 use std::fs::DirEntry;
+use cursive::Cursive;
+use crate::view::draw_dir_items;
+use std::rc::Rc;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Disk {
     pub name: String,
-    pub size: u64,
     pub available_space: u64,
     pub total_space: u64,
     pub root: DiskItem,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiskItem {
-    path: PathBuf,
+    pub path: PathBuf,
     pub children: Vec<DiskItem>,
     size: u64,
-    files_size: u64,
-    is_dir: bool,
+    pub files_size: u64,
+    pub is_dir: bool,
     is_symlink: bool,
     bad_file: bool,
 }
@@ -52,6 +54,10 @@ impl DiskItem {
             }
         }
         return Ok(DiskItem { path, children: vec![], size, files_size: 0, is_dir, is_symlink, bad_file });
+    }
+
+    pub fn name(&self) -> String {
+        return self.path.to_string_lossy().to_string();
     }
 
     fn populate(&mut self, mut observer: impl FnMut(u64)) -> Result<(), std::io::Error> {
@@ -90,7 +96,6 @@ pub fn get_all_disks(system: System) -> Vec<Disk> {
         .iter()
         .map(|disk| Disk {
             name: disk.get_name().to_string_lossy().into_owned(),
-            size: disk.get_total_space(),
             available_space: disk.get_available_space(),
             total_space: disk.get_total_space(),
             root: DiskItem::new_root(disk.get_mount_point().to_owned()),
@@ -99,40 +104,73 @@ pub fn get_all_disks(system: System) -> Vec<Disk> {
 }
 
 pub enum Status {
-    Reading { percentage: f64 },
+    Reading { percentage: usize },
     Done,
 }
 
-pub struct Inspector<'a, F: FnMut(Status)> {
-    disk: Disk,
+pub struct Inspector<F: FnMut(Status)> {
     total_used_space: u64,
     bytes_counted: u64,
     status_observer: F,
-    mem_used: u128,
 }
 
-impl<'a, F> Inspector<'a, F> where F: FnMut(Status) -> () {
-    pub fn new(mut disk: Disk, observer: F) -> Inspector<F> {
-        let total_used_space = disk.size - disk.available_space;
+impl<F> Inspector<F> where F: FnMut(Status) -> () {
+    pub fn new(total_used_space: u64, observer: F) -> Inspector<F> {
         Inspector {
-            disk,
             total_used_space,
             bytes_counted: 0,
             status_observer: observer,
-            mem_used: 0,
         }
     }
 
-    pub fn populate(&mut self) -> Result<(), std::io::Error> {
+    pub fn populate(&mut self, disk_root_path: PathBuf) -> Result<DiskItem, std::io::Error> {
         let bytes_counted = &mut (self.bytes_counted as f64);
         let total_used_space = self.total_used_space as f64;
         let observer = &mut self.status_observer;
-        self.disk.root.populate(|bytes| {
+        let mut disk_item = DiskItem::new_root(disk_root_path);
+        disk_item.populate(|bytes| {
             *bytes_counted += bytes as f64;
-            observer(Status::Reading { percentage: (*bytes_counted / total_used_space) });
+            observer(Status::Reading { percentage: ((*bytes_counted / total_used_space) * 100f64) as usize });
         })?;
-        println!("Last file read");
         (self.status_observer)(Status::Done);
-        Ok(())
+        Ok(disk_item)
+    }
+}
+
+pub struct DirectoryNavigator {
+    root: Rc<DiskItem>,
+    current_dir: Rc<DiskItem>,
+    parents: Vec<Rc<DiskItem>>,
+}
+
+impl DirectoryNavigator {
+    pub fn new(root: DiskItem) -> DirectoryNavigator {
+        let rc_root = Rc::new(root);
+        return DirectoryNavigator {
+            root: rc_root.clone(),
+            current_dir: rc_root,
+            parents: vec![],
+        };
+    }
+}
+
+impl DirectoryNavigator {
+    pub fn navigate_directory(&mut self, siv: &mut Cursive) {
+        let item_names: Vec<(String, u64, bool)> = self.current_dir.children
+            .iter()
+            .map(|item| (item.name(), item.files_size, item.is_dir))
+            .collect();
+        let title = self.current_dir.name();
+        let show_go_up = !self.parents.is_empty();
+
+//        draw_dir_items(siv, title, show_go_up, item_names, |lambda_siv, selected| {
+//            if selected == ".." {
+////                self.current_dir = self.parents.remove(self.parents.len() - 1);
+////                self.navigate_directory(lambda_siv);
+//            } else {
+//                self.parents.push(self.current_dir);
+//                self.navigate_directory(lambda_siv);
+//            }
+//        });
     }
 }
