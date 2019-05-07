@@ -23,6 +23,8 @@ use std::error::Error;
 use core::borrow::BorrowMut;
 use cursive::utils::Counter;
 use crate::index_of::IndexOf;
+use cursive::event::Event::Key;
+use cursive::event::Key::Esc;
 
 fn main() -> Result<(), std::io::Error> {
     WriteLogger::init(LevelFilter::Debug, Config::default(), File::create("di.log").unwrap()).unwrap();
@@ -30,7 +32,7 @@ fn main() -> Result<(), std::io::Error> {
     debug!("Starting up");
 
     let mut siv = Cursive::default();
-    siv.add_global_callback('q', |s| s.quit());
+    siv.add_global_callback(Key(Esc), |s| s.quit());
 
     let app = App::new();
 

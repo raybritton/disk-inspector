@@ -4,7 +4,9 @@ use std::fs::DirEntry;
 use cursive::Cursive;
 use crate::view::draw_dir_items;
 use crate::index_of::IndexOf;
-use cursive::views::Dialog;
+use cursive::views::{Dialog, TextView};
+use std::ffi::OsStr;
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
 pub struct Disk {
@@ -58,7 +60,7 @@ impl DiskItem {
     }
 
     pub fn name(&self) -> String {
-        return self.path.to_string_lossy().to_string();
+        return self.path.file_name().unwrap_or(OsStr::new("????")).to_string_lossy().to_string();
     }
 
     fn populate(&mut self, observer: &mut impl FnMut(u64)) -> Result<(), std::io::Error> {
@@ -83,6 +85,11 @@ impl DiskItem {
             .iter()
             .filter(|child| !child.is_dir && !child.is_symlink)
             .fold(0, |acc, child| acc + child.size);
+        self.children.sort_by(|lhs, rhs| {
+            let lhs_file = lhs.path.file_name().unwrap_or(OsStr::new("")).to_string_lossy().to_string().to_lowercase();
+            let rhs_file = rhs.path.file_name().unwrap_or(OsStr::new("")).to_string_lossy().to_string().to_lowercase();
+            lhs.is_dir.cmp(&rhs.is_dir).reverse().then(lhs_file.cmp(&rhs_file))
+        });
         observer(self.files_size);
         Ok(())
     }
@@ -141,30 +148,27 @@ pub fn navigate_directory(siv: &mut Cursive, current_dir: DiskItem, parents: Vec
         .iter()
         .map(|item| (item.name(), item.size, item.is_dir))
         .collect();
-    let title = current_dir.name();
+    let title = current_dir.path.to_string_lossy().to_string();
     let show_go_up = !parents.is_empty();
 
     debug!("Navigating {}, with {} children and {} parents", title, current_dir.children.len(), parents.len());
 
     draw_dir_items(siv, title, show_go_up, item_names, move |lambda_siv, selected| {
-        lambda_siv.add_layer(Dialog::new().title("Loading"));
+        lambda_siv.add_layer(Dialog::around(TextView::new("Loading")));
+        lambda_siv.refresh();
         let mut new_parents = parents.clone();
         if selected == ".." {
-            debug!("Selected up");
             let new_dir = new_parents.remove(new_parents.len() - 1);
             navigate_directory(lambda_siv, new_dir, new_parents);
         } else {
-            debug!("Selected {}", selected);
             let idx = current_dir.children.index_of(|item| item.name() == selected).unwrap();
-            debug!("Cloning dir and children");
-            let selected_dir = current_dir.clone().children[idx].clone();
-            if selected_dir.is_dir {
-                debug!("Pre push");
-                new_parents.push(current_dir.clone());
-                debug!("Post push");
+            let cloned_dir = current_dir.clone();
+            if cloned_dir.children[idx].is_dir {
+                let selected_dir = cloned_dir.children[idx].clone();
+                new_parents.push(cloned_dir);
                 navigate_directory(lambda_siv, selected_dir, new_parents);
             } else {
-                navigate_directory(lambda_siv, current_dir.clone(), new_parents);
+                lambda_siv.pop_layer();
             }
         }
     });
