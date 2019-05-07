@@ -1,53 +1,34 @@
 extern crate sysinfo;
 extern crate cursive;
+#[macro_use]
+extern crate log;
+extern crate simplelog;
 
 mod app;
 mod inspector;
 mod view;
+mod index_of;
+
+use simplelog::*;
+
+use std::fs::File;
 
 use cursive::traits::*;
 use crate::app::App;
 use cursive::Cursive;
-use crate::inspector::{Disk, DiskItem, DirectoryNavigator};
+use crate::inspector::{DiskItem, navigate_directory};
 use crate::view::*;
-use cursive::views::{Dialog, ProgressBar, LinearLayout};
+use cursive::views::{Dialog, ProgressBar};
 use std::error::Error;
 use core::borrow::BorrowMut;
 use cursive::utils::Counter;
-use cursive::direction::Orientation;
-use std::borrow::Cow;
-
-trait IndexOf<T> {
-    fn index_of<F>(&self, predicate: F) -> Option<usize> where F: Fn(&T) -> bool;
-}
-
-impl IndexOf<Disk> for Vec<Disk> {
-    fn index_of<F>(&self, predicate: F) -> Option<usize> where F: Fn(&Disk) -> bool {
-        let mut idx = 0usize;
-        for disk in self {
-            if predicate(disk) {
-                return Some(idx);
-            }
-            idx += 1;
-        }
-        return None;
-    }
-}
-
-impl IndexOf<DiskItem> for Vec<DiskItem> {
-    fn index_of<F>(&self, predicate: F) -> Option<usize> where F: Fn(&DiskItem) -> bool {
-        let mut idx = 0usize;
-        for disk in self {
-            if predicate(disk) {
-                return Some(idx);
-            }
-            idx += 1;
-        }
-        return None;
-    }
-}
+use crate::index_of::IndexOf;
 
 fn main() -> Result<(), std::io::Error> {
+    WriteLogger::init(LevelFilter::Debug, Config::default(), File::create("di.log").unwrap()).unwrap();
+
+    debug!("Starting up");
+
     let mut siv = Cursive::default();
     siv.add_global_callback('q', |s| s.quit());
 
@@ -55,14 +36,19 @@ fn main() -> Result<(), std::io::Error> {
 
     siv.add_layer(Dialog::new().title("Gathering system info"));
 
+    debug!("Getting disk info");
+
     match app.setup() {
         Ok(disk_list) => {
+            debug!("{} disks found", disk_list.len());
             let disks = disk_list;
             let disk_info_list = disks.iter().map(|disk| (disk.name.clone(), disk.available_space, disk.total_space)).collect();
 
             show_disk_list(&mut siv, disk_info_list, move |lambda_siv, disk_name| {
                 let idx = disks.index_of(|disk| disk.name == disk_name).unwrap();
                 let mut disk = disks.get(idx).unwrap().clone();
+
+                debug!("Disk is starting with {} children", disk.root.children.len());
 
                 let callback = lambda_siv.borrow_mut().cb_sink().clone();
                 let counter = Counter::new(0);
@@ -74,19 +60,27 @@ fn main() -> Result<(), std::io::Error> {
                     .fixed_width(100))
                     .title("Reading file sizes"));
 
+                debug!("Reading all files");
 
                 let child = app.read_file_sizes(&mut disk, counter.clone());
 
                 loop {
                     lambda_siv.refresh();
                     if counter.get() >= 100 {
+                        debug!("Counter above 100");
                         break;
                     }
                 }
 
-                child.join().expect_err("Panic during disk read");
+                debug!("Disk read reported complete");
 
-                lambda_siv.set_user_data(disk.root);
+                let filled_disk = child.join().unwrap().unwrap();
+
+                debug!("Disk read thread complete");
+
+                debug!("Disk is finishing with {} children", filled_disk.root.children.len());
+
+                lambda_siv.set_user_data(filled_disk.root);
                 callback.send(Box::new(navigate_disk)).unwrap();
             });
         }
@@ -105,8 +99,11 @@ fn main() -> Result<(), std::io::Error> {
 
 fn navigate_disk(siv: &mut Cursive) {
     let root = siv.user_data::<DiskItem>().unwrap().to_owned();
-    let mut dir_nav = DirectoryNavigator::new(root);
-    dir_nav.navigate_directory(siv);
+
+    debug!("Beginning nav");
+    siv.add_layer(Dialog::new().title("Loading"));
+
+    navigate_directory(siv, root, vec![]);
 }
 
 

@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use std::fs::DirEntry;
 use cursive::Cursive;
 use crate::view::draw_dir_items;
-use std::rc::Rc;
+use crate::index_of::IndexOf;
+use cursive::views::Dialog;
 
 #[derive(Debug, Clone)]
 pub struct Disk {
@@ -60,17 +61,13 @@ impl DiskItem {
         return self.path.to_string_lossy().to_string();
     }
 
-    fn populate(&mut self, mut observer: impl FnMut(u64)) -> Result<(), std::io::Error> {
-        self.populate_actual(&mut observer)
-    }
-
-    fn populate_actual(&mut self, observer: &mut impl FnMut(u64)) -> Result<(), std::io::Error> {
+    fn populate(&mut self, observer: &mut impl FnMut(u64)) -> Result<(), std::io::Error> {
         match self.path.read_dir() {
             Ok(entries) => {
                 for entry in entries {
                     let mut disk_item = DiskItem::new(&entry?)?;
                     if disk_item.is_dir && !disk_item.is_symlink {
-                        disk_item.populate_actual(observer)?;
+                        disk_item.populate(observer)?;
                     } else {
                         if disk_item.is_symlink {}
                     }
@@ -128,49 +125,47 @@ impl<F> Inspector<F> where F: FnMut(Status) -> () {
         let total_used_space = self.total_used_space as f64;
         let observer = &mut self.status_observer;
         let mut disk_item = DiskItem::new_root(disk_root_path);
-        disk_item.populate(|bytes| {
+        disk_item.populate(&mut |bytes| {
             *bytes_counted += bytes as f64;
-            observer(Status::Reading { percentage: ((*bytes_counted / total_used_space) * 100f64) as usize });
+            observer(Status::Reading { percentage: ((*bytes_counted / total_used_space) * 100_f64) as usize });
         })?;
         (self.status_observer)(Status::Done);
         Ok(disk_item)
     }
 }
 
-pub struct DirectoryNavigator {
-    root: Rc<DiskItem>,
-    current_dir: Rc<DiskItem>,
-    parents: Vec<Rc<DiskItem>>,
-}
+pub fn navigate_directory(siv: &mut Cursive, current_dir: DiskItem, parents: Vec<DiskItem>) {
+    &siv.pop_layer();
 
-impl DirectoryNavigator {
-    pub fn new(root: DiskItem) -> DirectoryNavigator {
-        let rc_root = Rc::new(root);
-        return DirectoryNavigator {
-            root: rc_root.clone(),
-            current_dir: rc_root,
-            parents: vec![],
-        };
-    }
-}
+    let item_names: Vec<(String, u64, bool)> = current_dir.children
+        .iter()
+        .map(|item| (item.name(), item.size, item.is_dir))
+        .collect();
+    let title = current_dir.name();
+    let show_go_up = !parents.is_empty();
 
-impl DirectoryNavigator {
-    pub fn navigate_directory(&mut self, siv: &mut Cursive) {
-        let item_names: Vec<(String, u64, bool)> = self.current_dir.children
-            .iter()
-            .map(|item| (item.name(), item.files_size, item.is_dir))
-            .collect();
-        let title = self.current_dir.name();
-        let show_go_up = !self.parents.is_empty();
+    debug!("Navigating {}, with {} children and {} parents", title, current_dir.children.len(), parents.len());
 
-//        draw_dir_items(siv, title, show_go_up, item_names, |lambda_siv, selected| {
-//            if selected == ".." {
-////                self.current_dir = self.parents.remove(self.parents.len() - 1);
-////                self.navigate_directory(lambda_siv);
-//            } else {
-//                self.parents.push(self.current_dir);
-//                self.navigate_directory(lambda_siv);
-//            }
-//        });
-    }
+    draw_dir_items(siv, title, show_go_up, item_names, move |lambda_siv, selected| {
+        lambda_siv.add_layer(Dialog::new().title("Loading"));
+        let mut new_parents = parents.clone();
+        if selected == ".." {
+            debug!("Selected up");
+            let new_dir = new_parents.remove(new_parents.len() - 1);
+            navigate_directory(lambda_siv, new_dir, new_parents);
+        } else {
+            debug!("Selected {}", selected);
+            let idx = current_dir.children.index_of(|item| item.name() == selected).unwrap();
+            debug!("Cloning dir and children");
+            let selected_dir = current_dir.clone().children[idx].clone();
+            if selected_dir.is_dir {
+                debug!("Pre push");
+                new_parents.push(current_dir.clone());
+                debug!("Post push");
+                navigate_directory(lambda_siv, selected_dir, new_parents);
+            } else {
+                navigate_directory(lambda_siv, current_dir.clone(), new_parents);
+            }
+        }
+    });
 }

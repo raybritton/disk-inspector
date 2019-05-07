@@ -3,14 +3,13 @@ use crate::inspector::{*};
 use std::io::{Error, ErrorKind};
 use std::thread;
 use cursive::utils::Counter;
-use std::thread::{JoinHandle};
-
+use std::thread::JoinHandle;
 
 pub struct App {}
 
 impl App {
     pub fn new() -> App {
-        return App { };
+        return App {};
     }
 }
 
@@ -27,9 +26,12 @@ impl App {
         return Ok(disks);
     }
 
-    pub fn read_file_sizes(&self, selected_disk: &mut Disk, progress_counter: Counter) -> JoinHandle<()> {
+    pub fn read_file_sizes(&self, selected_disk: &mut Disk, progress_counter: Counter) -> JoinHandle<Option<Disk>> {
         let thread_counter = progress_counter.clone();
-        let available_size = selected_disk.total_space - selected_disk.available_space;
+        let name = selected_disk.name.clone();
+        let total_space = selected_disk.total_space;
+        let available_space = selected_disk.available_space;
+        let available_size = total_space - available_space;
         let disk_path = selected_disk.root.path.clone();
         return thread::spawn(move || {
             let mut inspector = Inspector::new(available_size, |status| {
@@ -38,18 +40,23 @@ impl App {
                         thread_counter.set(percentage)
                     }
                     Status::Done => {
-                        thread_counter.set(100)
+                        thread_counter.set(100);
+                        debug!("Disk read done");
                     }
                 };
             });
 
             match inspector.populate(disk_path) {
-                Ok(_) => {
+                Ok(root_item) => {
                     thread_counter.set(100);
+                    debug!("Disk read complete");
+                    return Some(Disk { root: root_item, available_space, total_space, name });
                 }
                 Err(e) => {
                     thread_counter.set(100);
                     eprintln!("{:?}", e);
+                    error!("Disk read failed: {:?}", e);
+                    return None;
                 }
             }
         });
