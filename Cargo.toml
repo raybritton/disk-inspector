@@ -5,5 +5,8 @@ authors = ["Ray Britton <raybritton@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-azul = { git = "https://github.com/maps4print/azul", rev = "9090ce2" }
-tui = "0.5.1"
+sysinfo = "0.8.2"
+chrono = "0.4.6"
+crossterm = "0.9.2"
+simplelog = "0.5.3"
+log = "0.4.6"

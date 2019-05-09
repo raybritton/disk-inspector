@@ -1,0 +1,49 @@
+13:05:57 [DEBUG] disk_inspector: Starting up
+13:05:57 [DEBUG] disk_inspector: Getting disk info
+13:05:57 [DEBUG] disk_inspector: 1 disks found
+13:05:58 [DEBUG] disk_inspector: Selected 0
+13:06:16 [DEBUG] disk_inspector: 10% read
+13:08:59 [DEBUG] disk_inspector: Read complete
+13:09:05 [DEBUG] disk_inspector::app: Disk read done
+13:09:05 [DEBUG] disk_inspector::app: Disk read complete
+13:09:05 [DEBUG] disk_inspector: Thread joined
+13:09:05 [DEBUG] disk_inspector::inspector: Navigating: ????
+13:09:05 [DEBUG] disk_inspector::inspector: Navigating /, with 30 children and 1 parents
+13:09:11 [DEBUG] disk_inspector::inspector: Navigating: ????/Applications
+13:09:11 [DEBUG] disk_inspector::inspector: Navigating /Applications, with 59 children and 2 parents
+13:09:12 [DEBUG] disk_inspector::inspector: Navigating: ????/Applications/Android Studio.app
+13:09:12 [DEBUG] disk_inspector::inspector: Navigating /Applications/Android Studio.app, with 1 children and 3 parents
+13:09:13 [DEBUG] disk_inspector::inspector: Navigating: ????/Applications/Android Studio.app/Contents
+13:09:13 [DEBUG] disk_inspector::inspector: Navigating /Applications/Android Studio.app/Contents, with 10 children and 4 parents
+13:09:14 [DEBUG] disk_inspector::inspector: Navigating: ????/Applications/Android Studio.app/Contents/bin
+13:09:14 [DEBUG] disk_inspector::inspector: Navigating /Applications/Android Studio.app/Contents/bin, with 11 children and 5 parents
+13:09:15 [DEBUG] disk_inspector::inspector: Removed bin
+13:09:15 [DEBUG] disk_inspector::inspector: Navigating: ????/Applications/Android Studio.app/Contents
+13:09:15 [DEBUG] disk_inspector::inspector: Navigating /Applications/Android Studio.app/Contents/bin, with 11 children and 4 parents
+13:09:16 [DEBUG] disk_inspector::inspector: Removed Contents
+13:09:16 [DEBUG] disk_inspector::inspector: Navigating: ????/Applications/Android Studio.app
+13:09:16 [DEBUG] disk_inspector::inspector: Navigating /Applications/Android Studio.app/Contents, with 10 children and 3 parents
+13:09:16 [DEBUG] disk_inspector::inspector: Removed Android Studio.app
+13:09:16 [DEBUG] disk_inspector::inspector: Navigating: ????/Applications
+13:09:16 [DEBUG] disk_inspector::inspector: Navigating /Applications/Android Studio.app, with 1 children and 2 parents
+13:09:17 [DEBUG] disk_inspector::inspector: Removed Applications
+13:09:17 [DEBUG] disk_inspector::inspector: Navigating: ????
+13:09:17 [DEBUG] disk_inspector::inspector: Navigating /Applications, with 59 children and 1 parents
+13:09:17 [DEBUG] disk_inspector::inspector: Removed ????
+13:09:17 [DEBUG] disk_inspector::inspector: Navigating: 
+13:09:17 [DEBUG] disk_inspector::inspector: Navigating /, with 30 children and 0 parents
+13:09:21 [DEBUG] disk_inspector::inspector: Navigating: Users
+13:09:21 [DEBUG] disk_inspector::inspector: Navigating /Users, with 4 children and 1 parents
+13:09:22 [DEBUG] disk_inspector::inspector: Navigating: Users/ray
+13:09:22 [DEBUG] disk_inspector::inspector: Navigating /Users/ray, with 65 children and 2 parents
+13:09:26 [DEBUG] disk_inspector::inspector: Navigating: Users/ray/Documents
+13:09:26 [DEBUG] disk_inspector::inspector: Navigating /Users/ray/Documents, with 14 children and 3 parents
+14:15:16 [DEBUG] disk_inspector::inspector: Removed Documents
+14:15:16 [DEBUG] disk_inspector::inspector: Navigating: Users/ray
+14:15:16 [DEBUG] disk_inspector::inspector: Navigating /Users/ray/Documents, with 14 children and 2 parents
+14:15:17 [DEBUG] disk_inspector::inspector: Removed ray
+14:15:17 [DEBUG] disk_inspector::inspector: Navigating: Users
+14:15:17 [DEBUG] disk_inspector::inspector: Navigating /Users/ray, with 65 children and 1 parents
+14:15:18 [DEBUG] disk_inspector::inspector: Removed Users
+14:15:18 [DEBUG] disk_inspector::inspector: Navigating: 
+14:15:18 [DEBUG] disk_inspector::inspector: Navigating /Users, with 4 children and 0 parents
