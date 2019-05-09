@@ -60,7 +60,7 @@ impl DiskItem {
     }
 
     pub fn name(&self) -> String {
-        return self.path.file_name().unwrap_or(OsStr::new("????")).to_string_lossy().to_string();
+        return self.path.file_name().unwrap_or(OsStr::new("<Root>")).to_string_lossy().to_string();
     }
 
     fn populate(&mut self, observer: &mut impl FnMut(u64)) -> Result<(), std::io::Error> {
@@ -154,11 +154,12 @@ impl DirNav {
 }
 
 impl DirNav {
+    //This needs to be fixed, it definitely will cause a stack overflow eventually
     pub fn navigate_directory(&self, terminal_helper: &TerminalHelper, current_dir: Arc<DiskItem>, mut parents: Vec<Arc<DiskItem>>) {
         terminal_helper.clear_screen();
 
-        let parent_names: Vec<String> = parents.iter().map(|item| item.name()).collect();
-        debug!("Navigating: {}", parent_names.join("/"));
+        let parent_names: Vec<String> = parents.iter().map(|item| format!("'{}'", item.name())).collect();
+        debug!("Path: {}", parent_names.join("/"));
 
         let item_names: Vec<(String, u64, bool)> = current_dir.children
             .iter()
@@ -167,10 +168,11 @@ impl DirNav {
         let title = current_dir.path.to_string_lossy().to_string();
         let show_go_up = !parents.is_empty();
 
-        debug!("Navigating {}, with {} children and {} parents", title, current_dir.children.len(), parents.len());
+        debug!("Navigating {} with {} children", title, current_dir.children.len());
 
         match draw_dir_items(terminal_helper, title, show_go_up, item_names) {
             None => {
+                terminal_helper.teardown();
                 exit(0);
             }
             Some(selected) => {
@@ -181,7 +183,8 @@ impl DirNav {
                 } else {
                     let idx = current_dir.children.index_of(|item| item.name() == selected).unwrap();
                     let new_dir = &current_dir.children[idx];
-                    parents.push(new_dir.clone());
+                    debug!("Adding {}", current_dir.name());
+                    parents.push(current_dir.clone());
                     self.navigate_directory(terminal_helper, new_dir.clone(), parents);
                 }
             }

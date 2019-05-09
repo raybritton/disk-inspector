@@ -11,9 +11,7 @@ mod terminal_helper;
 mod atomic_counter;
 
 use simplelog::*;
-
 use std::fs::File;
-
 use crate::app::App;
 use crate::inspector::{DirNav, Disk};
 use crate::view::*;
@@ -35,9 +33,6 @@ fn main() -> Result<(), std::io::Error> {
     let terminal_helper = TerminalHelper::new();
 
     terminal_helper.setup();
-//    terminal_helper.on_esc(|| {
-//        exit(0);
-//    });
 
     terminal_helper.clear_screen();
 
@@ -54,6 +49,7 @@ fn main() -> Result<(), std::io::Error> {
             match show_disk_list(&terminal_helper, disk_info_list) {
                 None => {
                     debug!("Exiting at disk list");
+                    terminal_helper.teardown();
                     exit(0);
                 }
                 Some(selected) => {
@@ -75,9 +71,6 @@ fn main() -> Result<(), std::io::Error> {
                         let progress_value = progress.get();
                         if last_printed != progress_value {
                             last_printed = progress_value;
-                            if last_printed ^ 10 == 0 {
-                                debug!("{}% read", last_printed);
-                            }
                             terminal_helper.draw_progress("Reading files", last_printed);
                         }
                         if progress_value >= 100 {
@@ -100,7 +93,7 @@ fn main() -> Result<(), std::io::Error> {
 
                     let nav_dir: DirNav = DirNav::new(new_disk);
 
-                    nav_dir.navigate_directory(&terminal_helper, filled_root.clone(), vec![filled_root.clone()]);
+                    nav_dir.navigate_directory(&terminal_helper, filled_root.clone(), vec![]);
                 }
             }
         }

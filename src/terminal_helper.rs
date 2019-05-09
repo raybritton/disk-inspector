@@ -118,6 +118,7 @@ impl TerminalHelper {
 
     pub fn show_list<S: Into<String>>(&self, title: S, list: Vec<ListItem>) -> Option<usize> {
         let mut cursor_idx = 0_usize;
+        let title = title.into();
 
         let box_x;
         let box_y;
@@ -144,11 +145,17 @@ impl TerminalHelper {
         let text_y = box_y + 1;
         let col_text = box_x + 2;
 
+        let title_x = term_width / 2 - title.chars().count() as u16 / 2;
+
         let mut list_start_idx = 0;
 
         self.clear_screen();
 
         self.draw_box(box_x, box_y, box_w, box_h);
+
+        self.cursor.goto(title_x - 2, box_y).unwrap();
+        print!("┫ {}┣", title);
+
         let list_text: Vec<String> = list.iter()
             .enumerate()
             .map(|(idx, item)| {
