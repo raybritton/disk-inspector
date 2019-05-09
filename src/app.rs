@@ -2,8 +2,9 @@ use sysinfo::SystemExt;
 use crate::inspector::{*};
 use std::io::{Error, ErrorKind};
 use std::thread;
-use cursive::utils::Counter;
 use std::thread::JoinHandle;
+use crate::atomic_counter::AtomicCounter;
+use std::sync::Arc;
 
 pub struct App {}
 
@@ -26,8 +27,7 @@ impl App {
         return Ok(disks);
     }
 
-    pub fn read_file_sizes(&self, selected_disk: &mut Disk, progress_counter: Counter) -> JoinHandle<Option<Disk>> {
-        let thread_counter = progress_counter.clone();
+    pub fn read_file_sizes(&self, selected_disk: &mut Disk, progress_counter: Arc<AtomicCounter>) -> JoinHandle<Option<DiskItem>> {
         let name = selected_disk.name.clone();
         let total_space = selected_disk.total_space;
         let available_space = selected_disk.available_space;
@@ -37,10 +37,10 @@ impl App {
             let mut inspector = Inspector::new(available_size, |status| {
                 match status {
                     Status::Reading { percentage } => {
-                        thread_counter.set(percentage)
+                        progress_counter.set(percentage)
                     }
                     Status::Done => {
-                        thread_counter.set(100);
+                        progress_counter.set(100);
                         debug!("Disk read done");
                     }
                 };
@@ -48,12 +48,12 @@ impl App {
 
             match inspector.populate(disk_path) {
                 Ok(root_item) => {
-                    thread_counter.set(100);
+                    progress_counter.set(100);
                     debug!("Disk read complete");
-                    return Some(Disk { root: root_item, available_space, total_space, name });
+                    return Some(root_item);
                 }
                 Err(e) => {
-                    thread_counter.set(100);
+                    progress_counter.set(100);
                     eprintln!("{:?}", e);
                     error!("Disk read failed: {:?}", e);
                     return None;

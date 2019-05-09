@@ -1,5 +1,4 @@
 extern crate sysinfo;
-extern crate cursive;
 #[macro_use]
 extern crate log;
 extern crate simplelog;
@@ -8,35 +7,41 @@ mod app;
 mod inspector;
 mod view;
 mod index_of;
+mod terminal_helper;
+mod atomic_counter;
 
 use simplelog::*;
 
 use std::fs::File;
 
-use cursive::traits::*;
 use crate::app::App;
-use cursive::Cursive;
-use crate::inspector::{DiskItem, navigate_directory};
+use crate::inspector::{DirNav, Disk};
 use crate::view::*;
-use cursive::views::{Dialog, ProgressBar};
 use std::error::Error;
-use core::borrow::BorrowMut;
-use cursive::utils::Counter;
-use crate::index_of::IndexOf;
-use cursive::event::Event::Key;
-use cursive::event::Key::Esc;
+use crate::terminal_helper::TerminalHelper;
+use std::process::exit;
+use crate::atomic_counter::AtomicCounter;
+use std::sync::Arc;
+use crossterm::RawScreen;
 
 fn main() -> Result<(), std::io::Error> {
     WriteLogger::init(LevelFilter::Debug, Config::default(), File::create("di.log").unwrap()).unwrap();
 
     debug!("Starting up");
 
-    let mut siv = Cursive::default();
-    siv.add_global_callback(Key(Esc), |s| s.quit());
-
     let app = App::new();
 
-    siv.add_layer(Dialog::new().title("Gathering system info"));
+    let raw = RawScreen::into_raw_mode();
+    let terminal_helper = TerminalHelper::new();
+
+    terminal_helper.setup();
+//    terminal_helper.on_esc(|| {
+//        exit(0);
+//    });
+
+    terminal_helper.clear_screen();
+
+    terminal_helper.show_dialog("Gathering system info");
 
     debug!("Getting disk info");
 
@@ -46,66 +51,69 @@ fn main() -> Result<(), std::io::Error> {
             let disks = disk_list;
             let disk_info_list = disks.iter().map(|disk| (disk.name.clone(), disk.available_space, disk.total_space)).collect();
 
-            show_disk_list(&mut siv, disk_info_list, move |lambda_siv, disk_name| {
-                let idx = disks.index_of(|disk| disk.name == disk_name).unwrap();
-                let mut disk = disks.get(idx).unwrap().clone();
-
-                debug!("Disk is starting with {} children", disk.root.children.len());
-
-                let callback = lambda_siv.borrow_mut().cb_sink().clone();
-                let counter = Counter::new(0);
-
-                lambda_siv.pop_layer();
-                lambda_siv.add_layer(Dialog::around(ProgressBar::new()
-                    .range(0, 100)
-                    .with_value(counter.clone())
-                    .fixed_width(100))
-                    .title("Reading file sizes"));
-
-                debug!("Reading all files");
-
-                let child = app.read_file_sizes(&mut disk, counter.clone());
-
-                loop {
-                    lambda_siv.refresh();
-                    if counter.get() >= 100 {
-                        debug!("Counter above 100");
-                        break;
-                    }
+            match show_disk_list(&terminal_helper, disk_info_list) {
+                None => {
+                    debug!("Exiting at disk list");
+                    exit(0);
                 }
+                Some(selected) => {
+                    debug!("Selected {}", &selected);
+                    let mut disk = disks.get(selected).unwrap().clone();
 
-                debug!("Disk read reported complete");
+                    terminal_helper.clear_screen();
+                    terminal_helper.show_dialog("Getting all file sizes");
 
-                let filled_disk = child.join().unwrap().unwrap();
+                    let progress = Arc::new(AtomicCounter::new());
 
-                debug!("Disk read thread complete");
+                    let child = app.read_file_sizes(&mut disk, progress.clone());
 
-                debug!("Disk is finishing with {} children", filled_disk.root.children.len());
+                    let mut last_printed = 0;
 
-                lambda_siv.set_user_data(filled_disk.root);
-                callback.send(Box::new(navigate_disk)).unwrap();
-            });
+                    terminal_helper.clear_screen();
+
+                    loop {
+                        let progress_value = progress.get();
+                        if last_printed != progress_value {
+                            last_printed = progress_value;
+                            if last_printed ^ 10 == 0 {
+                                debug!("{}% read", last_printed);
+                            }
+                            terminal_helper.draw_progress("Reading files", last_printed);
+                        }
+                        if progress_value >= 100 {
+                            debug!("Read complete");
+                            break;
+                        }
+                    }
+
+                    let x = child.join().expect("join failed");
+                    let filled_root = Arc::new(x.expect(""));
+
+                    debug!("Thread joined");
+
+                    let new_disk = Disk {
+                        name: disk.name.clone(),
+                        available_space: disk.available_space,
+                        total_space: disk.total_space,
+                        root: filled_root.clone(),
+                    };
+
+                    let nav_dir: DirNav = DirNav::new(new_disk);
+
+                    nav_dir.navigate_directory(&terminal_helper, filled_root.clone(), vec![filled_root.clone()]);
+                }
+            }
         }
         Err(err) => {
             eprintln!("{}", err.description());
             eprintln!("{}", err.raw_os_error().unwrap_or(-1));
             eprintln!("{:?}", err.kind());
-            &siv.add_layer(Dialog::new().title(err.description()).button("Ok", |s| s.quit()));
         }
     }
 
-    &siv.run();
+    terminal_helper.teardown();
 
     Ok(())
-}
-
-fn navigate_disk(siv: &mut Cursive) {
-    let root = siv.user_data::<DiskItem>().unwrap().to_owned();
-
-    debug!("Beginning nav");
-    siv.add_layer(Dialog::new().title("Loading"));
-
-    navigate_directory(siv, root, vec![]);
 }
 
 

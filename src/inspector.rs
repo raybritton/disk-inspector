@@ -1,25 +1,25 @@
 use sysinfo::{SystemExt, DiskExt, System};
 use std::path::PathBuf;
 use std::fs::DirEntry;
-use cursive::Cursive;
 use crate::view::draw_dir_items;
 use crate::index_of::IndexOf;
-use cursive::views::{Dialog, TextView};
 use std::ffi::OsStr;
-use std::cmp::Ordering;
+use crate::terminal_helper::TerminalHelper;
+use std::process::exit;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Disk {
     pub name: String,
     pub available_space: u64,
     pub total_space: u64,
-    pub root: DiskItem,
+    pub root: Arc<DiskItem>,
 }
 
 #[derive(Debug, Clone)]
 pub struct DiskItem {
     pub path: PathBuf,
-    pub children: Vec<DiskItem>,
+    pub children: Vec<Arc<DiskItem>>,
     size: u64,
     pub files_size: u64,
     pub is_dir: bool,
@@ -73,7 +73,7 @@ impl DiskItem {
                     } else {
                         if disk_item.is_symlink {}
                     }
-                    self.children.push(disk_item);
+                    self.children.push(Arc::new(disk_item));
                 }
             }
             Err(_) => { /*don't care, nothing can be done*/ }
@@ -102,7 +102,7 @@ pub fn get_all_disks(system: System) -> Vec<Disk> {
             name: disk.get_name().to_string_lossy().into_owned(),
             available_space: disk.get_available_space(),
             total_space: disk.get_total_space(),
-            root: DiskItem::new_root(disk.get_mount_point().to_owned()),
+            root: Arc::new(DiskItem::new_root(disk.get_mount_point().to_owned())),
         })
         .collect();
 }
@@ -141,35 +141,50 @@ impl<F> Inspector<F> where F: FnMut(Status) -> () {
     }
 }
 
-pub fn navigate_directory(siv: &mut Cursive, current_dir: DiskItem, parents: Vec<DiskItem>) {
-    &siv.pop_layer();
+pub struct DirNav {
+    disk: Box<Disk>,
+}
 
-    let item_names: Vec<(String, u64, bool)> = current_dir.children
-        .iter()
-        .map(|item| (item.name(), item.size, item.is_dir))
-        .collect();
-    let title = current_dir.path.to_string_lossy().to_string();
-    let show_go_up = !parents.is_empty();
+impl DirNav {
+    pub fn new(disk: Disk) -> DirNav {
+        return DirNav {
+            disk: Box::new(disk),
+        };
+    }
+}
 
-    debug!("Navigating {}, with {} children and {} parents", title, current_dir.children.len(), parents.len());
+impl DirNav {
+    pub fn navigate_directory(&self, terminal_helper: &TerminalHelper, current_dir: Arc<DiskItem>, mut parents: Vec<Arc<DiskItem>>) {
+        terminal_helper.clear_screen();
 
-    draw_dir_items(siv, title, show_go_up, item_names, move |lambda_siv, selected| {
-        lambda_siv.add_layer(Dialog::around(TextView::new("Loading")));
-        lambda_siv.refresh();
-        let mut new_parents = parents.clone();
-        if selected == ".." {
-            let new_dir = new_parents.remove(new_parents.len() - 1);
-            navigate_directory(lambda_siv, new_dir, new_parents);
-        } else {
-            let idx = current_dir.children.index_of(|item| item.name() == selected).unwrap();
-            let cloned_dir = current_dir.clone();
-            if cloned_dir.children[idx].is_dir {
-                let selected_dir = cloned_dir.children[idx].clone();
-                new_parents.push(cloned_dir);
-                navigate_directory(lambda_siv, selected_dir, new_parents);
-            } else {
-                lambda_siv.pop_layer();
+        let parent_names: Vec<String> = parents.iter().map(|item| item.name()).collect();
+        debug!("Navigating: {}", parent_names.join("/"));
+
+        let item_names: Vec<(String, u64, bool)> = current_dir.children
+            .iter()
+            .map(|item| (item.name(), item.size, item.is_dir))
+            .collect();
+        let title = current_dir.path.to_string_lossy().to_string();
+        let show_go_up = !parents.is_empty();
+
+        debug!("Navigating {}, with {} children and {} parents", title, current_dir.children.len(), parents.len());
+
+        match draw_dir_items(terminal_helper, title, show_go_up, item_names) {
+            None => {
+                exit(0);
+            }
+            Some(selected) => {
+                if selected == ".." {
+                    let new_dir = parents.pop().unwrap();
+                    debug!("Removed {}", new_dir.name());
+                    self.navigate_directory(terminal_helper, new_dir, parents);
+                } else {
+                    let idx = current_dir.children.index_of(|item| item.name() == selected).unwrap();
+                    let new_dir = &current_dir.children[idx];
+                    parents.push(new_dir.clone());
+                    self.navigate_directory(terminal_helper, new_dir.clone(), parents);
+                }
             }
         }
-    });
+    }
 }
