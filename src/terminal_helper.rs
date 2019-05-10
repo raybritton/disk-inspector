@@ -205,7 +205,9 @@ impl TerminalHelper {
                 }
                 KeyEvent::Char(c) => {
                     if c == '\n' {
-                        return Some(cursor_idx);
+                        if list[cursor_idx].selectable {
+                            return Some(cursor_idx);
+                        }
                     }
                 }
                 _ => {}
