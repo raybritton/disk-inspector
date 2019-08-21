@@ -1,6 +1,7 @@
 use crossterm::{TerminalInput, TerminalCursor, Crossterm, Terminal, ClearType, RawScreen, KeyEvent, InputEvent, ObjectStyle, Attribute};
 use std::io::{stdout, Write};
 use std::cmp::{max, min};
+use crate::terminal_helper::BoxSymbols::{*};
 
 pub struct ListItem {
     pub text: String,
@@ -38,7 +39,7 @@ impl TerminalHelper {
     pub fn clear_screen(&self) {
         self.cursor.goto(0, 0).unwrap();
         let (w, h) = self.terminal.terminal_size();
-        for y in 0..h {
+        for _ in 0..=h {
             print!("{:1$}", " ", w as usize);
         }
         self.cursor.goto(0, 0).unwrap();
@@ -54,7 +55,7 @@ impl TerminalHelper {
         let x = (term_width / 2) - (width / 2);
         let y = (term_height / 2) - 3;
 
-        self.draw_box(x, y, width, 4);
+        self.draw_box(x, y, width, 4, None);
 
         self.cursor.goto(x + 2, y + 2).unwrap();
         print!("{}", message);
@@ -63,7 +64,6 @@ impl TerminalHelper {
     }
 
     pub fn draw_progress<S: Into<String>>(&self, title: S, progress: usize) {
-        let message = format!(" {} ", title.into());
         let (term_width, term_height) = self.terminal.terminal_size();
 
         let percent = progress as f64 / 100_f64;
@@ -73,52 +73,48 @@ impl TerminalHelper {
         let x = 2;
         let y = (term_height / 2) - 3;
 
-        let full_width = term_width - 8;
-        let title_x = (full_width / 2) - ((message.len() as u16) / 2) + 6;
+        self.draw_box(x, y, width, 4, Some(title.into()));
 
-        self.draw_box(x, y, width, 4);
-
-        self.cursor.goto(title_x, y).unwrap();
-        print!("{}", message);
-
-        self.cursor.goto(title_x - 1, y).unwrap();
-        print!("{}", "┫");
-        self.cursor.goto(title_x + message.len() as u16, y).unwrap();
-        print!("{}", "┣");
         for i in 1..(num_of_blocks as i64) {
             self.cursor.goto(x + 2 + i as u16, y + 2).unwrap();
-            print!("{}", "█");
+            BoxSymbols::print_os_symbol(ProgressBlock);
         }
 
         stdout().flush().unwrap();
     }
 
-    fn draw_box(&self, x: u16, y: u16, w: u16, h: u16) {
+    fn draw_box(&self, x: u16, y: u16, w: u16, h: u16, message: Option<String>) {
         self.cursor.goto(x, y).unwrap();
-        print!("┏");
+        BoxSymbols::print_os_symbol(TopLeft);
         self.cursor.goto(x, y + h).unwrap();
-        print!("┗");
+        BoxSymbols::print_os_symbol(BottomLeft);
         self.cursor.goto(x + w, y).unwrap();
-        print!("┓");
+        BoxSymbols::print_os_symbol(TopRight);
         self.cursor.goto(x + w, y + h).unwrap();
-        print!("┛");
+        BoxSymbols::print_os_symbol(BottomRight);
         for i in 1..h {
             self.cursor.goto(x, y + i).unwrap();
-            print!("┃");
+            BoxSymbols::print_os_symbol(Vertical);
             self.cursor.goto(x + w, y + i).unwrap();
-            print!("┃");
+            BoxSymbols::print_os_symbol(Vertical);
         }
-        for i in 1..(w - 1) {
+        for i in 1..(w) {
             self.cursor.goto(x + i, y).unwrap();
-            print!("━");
+            BoxSymbols::print_os_symbol(Horizontal);
             self.cursor.goto(x + i, y + h).unwrap();
-            print!("━");
+            BoxSymbols::print_os_symbol(Horizontal);
+        }
+
+        if let Some(title) = message {
+            let (term_width, _) = self.terminal.terminal_size();
+            let title_x = term_width / 2 - title.chars().count() as u16 / 2;
+            self.cursor.goto(title_x, y).unwrap();
+            print!("{} {} {}", BoxSymbols::symbol_for_os(TitlePrefix), title, BoxSymbols::symbol_for_os(TitleSuffix));
         }
     }
 
     pub fn show_list<S: Into<String>>(&self, title: S, list: Vec<ListItem>) -> Option<usize> {
         let mut cursor_idx = 0_usize;
-        let title = title.into();
 
         let box_x;
         let box_y;
@@ -145,16 +141,11 @@ impl TerminalHelper {
         let text_y = box_y + 1;
         let col_text = box_x + 2;
 
-        let title_x = term_width / 2 - title.chars().count() as u16 / 2;
-
         let mut list_start_idx = 0;
 
         self.clear_screen();
 
-        self.draw_box(box_x, box_y, box_w, box_h);
-
-        self.cursor.goto(title_x - 2, box_y).unwrap();
-        print!("┫ {}┣", title);
+        self.draw_box(box_x, box_y, box_w, box_h, Some(title.into()));
 
         let list_text: Vec<String> = list.iter()
             .enumerate()
@@ -177,7 +168,7 @@ impl TerminalHelper {
             for i in 0..text_h as usize {
                 self.cursor.goto(col_text, text_y + i as u16).unwrap();
                 if cursor_idx == i + list_start_idx {
-                    print!("▶ {}", list_text[i + list_start_idx]);
+                    print!("{} {}", BoxSymbols::symbol_for_os(ListCursor), list_text[i + list_start_idx]);
                 } else {
                     print!("  {}", list_text[i + list_start_idx]);
                 }
@@ -205,7 +196,9 @@ impl TerminalHelper {
                 }
                 KeyEvent::Char(c) => {
                     if c == '\n' {
-                        return Some(cursor_idx);
+                        if list[cursor_idx].selectable {
+                            return Some(cursor_idx);
+                        }
                     }
                 }
                 _ => {}
@@ -236,5 +229,62 @@ impl TerminalHelper {
                 }
             }
         }
+    }
+}
+
+enum BoxSymbols {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+    Vertical,
+    Horizontal,
+    ListCursor,
+    TitlePrefix,
+    TitleSuffix,
+    ProgressBlock
+}
+
+impl BoxSymbols {
+    fn simple(&self) -> &str {
+        match self {
+            TopLeft => return "/",
+            TopRight => return "\\",
+            BottomLeft => return "\\",
+            BottomRight => return "/",
+            Vertical => return "|",
+            Horizontal => return "-",
+            ListCursor => return ">",
+            TitlePrefix => return "[",
+            TitleSuffix => return "]",
+            ProgressBlock => return "█",
+        }
+    }
+
+    fn fancy(&self) -> &str {
+        match self {
+            TopLeft => return "┏",
+            TopRight => return "┓",
+            BottomLeft => return "┗",
+            BottomRight => return "┛",
+            Vertical => return "┃",
+            Horizontal => return "━",
+            ListCursor => return "▶",
+            TitlePrefix => return "┫",
+            TitleSuffix => return "┣",
+            ProgressBlock => return "█",
+        }
+    }
+
+    pub fn symbol_for_os(symbol: BoxSymbols) -> String {
+        if cfg!(target_os = "windows") {
+            return symbol.simple().to_string();
+        } else {
+            return symbol.fancy().to_string();
+        }
+    }
+
+    pub fn print_os_symbol(symbol: BoxSymbols) {
+        print!("{}", BoxSymbols::symbol_for_os(symbol));
     }
 }
