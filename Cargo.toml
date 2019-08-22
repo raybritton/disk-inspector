@@ -5,7 +5,7 @@ authors = ["Ray Britton <raybritton@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-sysinfo = "0.8.2"
+sysinfo = "0.9.1"
 chrono = "0.4.6"
 crossterm = "0.9.2"
 simplelog = "0.5.3"
